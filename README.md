@@ -11,7 +11,7 @@ Go-Schema is a lightweight data validation library for Go, inspired by [Cerberus
 
 ## Installation
 ```sh
- go get github.com/josesalasdev/go-schema
+ go get github.com/josesalasdev/go-schema/validator
 ```
 
 ## Usage
@@ -21,7 +21,7 @@ package main
 
 import (
     "fmt"
-    "github.com/josesalasdev/go-schema"
+    "github.com/josesalasdev/go-schema/validator"
 )
 
 func main() {
