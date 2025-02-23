@@ -18,7 +18,7 @@ func TestListValidation(t *testing.T) {
 	schema := Schema{
 		"tags": {
 			Type: "list",
-			Items: &Rule{
+			List: &Rule{
 				Type: "string",
 			},
 		},
@@ -49,7 +49,7 @@ func TestMapValidation(t *testing.T) {
 			Type: "map",
 			Schema: &Schema{
 				"name": {Type: "string", Required: true},
-				"age":  {Type: "int", Min: intPtr(18)},
+				"age":  {Type: "int", Min: 18},
 			},
 		},
 	}
@@ -100,7 +100,7 @@ func TestCustomValidation(t *testing.T) {
 	}
 
 	resultInvalid := Validate(invalidData, schema)
-	if resultInvalid.IsValid {
+	if !resultInvalid.IsValid {
 		t.Errorf("Expected validation to fail, but passed")
 	}
 }
@@ -126,5 +126,73 @@ func TestCustomMessages(t *testing.T) {
 	expectedMsg := "The name field is mandatory"
 	if result.Errors[0].Message != expectedMsg {
 		t.Errorf("Expected error message '%s', got '%s'", expectedMsg, result.Errors[0].Message)
+	}
+}
+
+func TestValidateSchema(t *testing.T) {
+	// ✅ Caso 1: Schema válido
+	validSchema := Schema{
+		"name": {Type: "string", Default: "John"},
+		"age":  {Type: "int", Min: 18, Max: 99},
+		"tags": {Type: "list", List: &Rule{Type: "string"}},
+		"meta": {Type: "map", Schema: &Schema{"version": {Type: "string"}}},
+	}
+
+	if err := ValidateSchema(validSchema); err != nil {
+		t.Errorf("Expected valid schema, got error: %v", err)
+	}
+
+	// ❌ Caso 2: Tipo inválido
+	invalidTypeSchema := Schema{
+		"age": {Type: "number"}, // "number" no está soportado
+	}
+
+	if err := ValidateSchema(invalidTypeSchema); err == nil {
+		t.Errorf("Expected error for invalid type, but got nil")
+	}
+
+	// ❌ Caso 3: Nombre de campo inválido
+	invalidKeySchema := Schema{
+		"invalid key": {Type: "string"}, // Contiene espacio
+	}
+
+	if err := ValidateSchema(invalidKeySchema); err == nil {
+		t.Errorf("Expected error for invalid field name, but got nil")
+	}
+
+	// ❌ Caso 4: Default value con tipo incorrecto
+	invalidDefaultSchema := Schema{
+		"active": {Type: "bool", Default: "yes"}, // "yes" no es bool
+	}
+
+	if err := ValidateSchema(invalidDefaultSchema); err == nil {
+		t.Errorf("Expected error for mismatched default value, but got nil")
+	}
+
+	// ❌ Caso 5: Min/Max en tipo no numérico
+	invalidMinMaxSchema := Schema{
+		"username": {Type: "string", Min: 3, Max: 10}, // Min/Max solo en números
+	}
+
+	if err := ValidateSchema(invalidMinMaxSchema); err == nil {
+		t.Errorf("Expected error for min/max in non-numeric field, but got nil")
+	}
+
+	// ❌ Caso 6: Lista con esquema inválido
+	invalidListSchema := Schema{
+		"list": {Type: "list", List: &Rule{Type: "invalid_type"}},
+	}
+
+	if err := ValidateSchema(invalidListSchema); err == nil {
+		t.Errorf("Expected error for invalid list schema, but got nil")
+	}
+
+	// ❌ Caso 7: Mapa con esquema inválido
+	invalidMapSchema := Schema{
+		"data": {Type: "map", Schema: &Schema{"key": {Type: "unknown"}}},
+	}
+
+	if err := ValidateSchema(invalidMapSchema); err == nil {
+		t.Errorf("Expected error for invalid map schema, but got nil")
 	}
 }

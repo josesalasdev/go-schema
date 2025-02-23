@@ -1,8 +1,30 @@
 package validator
 
 import (
-	"regexp"
+	"fmt"
+	"reflect"
 )
+
+func matchesType(value interface{}, expectedType string) bool {
+	t := reflect.TypeOf(value)
+
+	switch expectedType {
+	case "string":
+		return t.Kind() == reflect.String
+	case "int":
+		return t.Kind() == reflect.Int || t.Kind() == reflect.Int64
+	case "float":
+		return t.Kind() == reflect.Float32 || t.Kind() == reflect.Float64
+	case "bool":
+		return t.Kind() == reflect.Bool
+	case "list":
+		return t.Kind() == reflect.Slice || t.Kind() == reflect.Array
+	case "map":
+		return t.Kind() == reflect.Map
+	default:
+		return false
+	}
+}
 
 func Validate(data map[string]interface{}, schema Schema) ValidationResult {
 	var validationErrors []ValidationError
@@ -10,6 +32,14 @@ func Validate(data map[string]interface{}, schema Schema) ValidationResult {
 	for field, rule := range schema {
 		value, exists := data[field]
 
+		// Aplicar valor por defecto si no existe
+		if !exists && rule.Default != nil {
+			data[field] = rule.Default
+			value = rule.Default
+			exists = true
+		}
+
+		// Verificar si es obligatorio
 		if rule.Required && !exists {
 			msg := "Field is required"
 			if rule.Messages != nil && rule.Messages.Required != nil {
@@ -19,79 +49,14 @@ func Validate(data map[string]interface{}, schema Schema) ValidationResult {
 			continue
 		}
 
-		if exists {
-			switch rule.Type {
-			case "string":
-				str, ok := value.(string)
-				if !ok {
-					msg := "Must be a string"
-					if rule.Messages != nil && rule.Messages.TypeMismatch != nil {
-						msg = *rule.Messages.TypeMismatch
-					}
-					validationErrors = append(validationErrors, ValidationError{Field: field, Message: msg})
-					continue
-				}
-				if rule.MinLength != nil && len(str) < *rule.MinLength {
-					msg := "String too short"
-					if rule.Messages != nil && rule.Messages.MinLength != nil {
-						msg = *rule.Messages.MinLength
-					}
-					validationErrors = append(validationErrors, ValidationError{Field: field, Message: msg})
-				}
-				if rule.MaxLength != nil && len(str) > *rule.MaxLength {
-					msg := "String too long"
-					if rule.Messages != nil && rule.Messages.MaxLength != nil {
-						msg = *rule.Messages.MaxLength
-					}
-					validationErrors = append(validationErrors, ValidationError{Field: field, Message: msg})
-				}
-				if rule.Regex != nil {
-					re := regexp.MustCompile(*rule.Regex)
-					if !re.MatchString(str) {
-						msg := "Invalid format"
-						if rule.Messages != nil && rule.Messages.Regex != nil {
-							msg = *rule.Messages.Regex
-						}
-						validationErrors = append(validationErrors, ValidationError{Field: field, Message: msg})
-					}
-				}
-
-			case "int":
-				num, ok := value.(int)
-				if !ok {
-					msg := "Must be an integer"
-					if rule.Messages != nil && rule.Messages.TypeMismatch != nil {
-						msg = *rule.Messages.TypeMismatch
-					}
-					validationErrors = append(validationErrors, ValidationError{Field: field, Message: msg})
-					continue
-				}
-				if rule.Min != nil && num < *rule.Min {
-					msg := "Number too small"
-					if rule.Messages != nil && rule.Messages.Min != nil {
-						msg = *rule.Messages.Min
-					}
-					validationErrors = append(validationErrors, ValidationError{Field: field, Message: msg})
-				}
-				if rule.Max != nil && num > *rule.Max {
-					msg := "Number too large"
-					if rule.Messages != nil && rule.Messages.Max != nil {
-						msg = *rule.Messages.Max
-					}
-					validationErrors = append(validationErrors, ValidationError{Field: field, Message: msg})
-				}
+		// Validar tipo
+		if exists && !matchesType(value, rule.Type) {
+			msg := fmt.Sprintf("Invalid type: expected %s, got %T", rule.Type, value)
+			if rule.Messages != nil && rule.Messages.TypeMismatch != nil {
+				msg = *rule.Messages.TypeMismatch
 			}
-
-			// Apply custom validation function
-			if rule.CheckWith != nil {
-				if errorMsg := rule.CheckWith(value); errorMsg != nil {
-					msg := *errorMsg
-					if rule.Messages != nil && rule.Messages.CustomError != nil {
-						msg = *rule.Messages.CustomError
-					}
-					validationErrors = append(validationErrors, ValidationError{Field: field, Message: msg})
-				}
-			}
+			validationErrors = append(validationErrors, ValidationError{Field: field, Message: msg})
+			continue
 		}
 	}
 
@@ -99,4 +64,58 @@ func Validate(data map[string]interface{}, schema Schema) ValidationResult {
 		IsValid: len(validationErrors) == 0,
 		Errors:  validationErrors,
 	}
+}
+
+func isValidJSONKey(key string) bool {
+	// Un JSON key válido no debe contener caracteres de control ni espacios en blanco
+	for _, r := range key {
+		if r <= 0x1F || r == ' ' { // Caracteres de control y espacio
+			return false
+		}
+	}
+	return true
+}
+
+func ValidateSchema(schema Schema) error {
+	validTypes := map[string]bool{
+		"string": true, "int": true, "float": true,
+		"bool": true, "list": true, "map": true,
+	}
+
+	for field, rule := range schema {
+		// 1. Validar que el nombre del campo sea un string válido en JSON
+		if !isValidJSONKey(field) {
+			return fmt.Errorf("invalid field name: '%s'", field)
+		}
+
+		// 2. Validar que el tipo esté en la lista de tipos permitidos
+		if _, ok := validTypes[rule.Type]; !ok {
+			return fmt.Errorf("invalid type '%s' for field '%s'", rule.Type, field)
+		}
+
+		// 3. Validar que los valores por defecto sean del tipo correcto
+		if rule.Default != nil && !matchesType(rule.Default, rule.Type) {
+			return fmt.Errorf("default value for '%s' does not match type '%s'", field, rule.Type)
+		}
+
+		// 4. Validar que Min y Max solo existan en tipos numéricos
+		if (rule.Min != 0 || rule.Max != 0) && rule.Type != "int" && rule.Type != "float" {
+			return fmt.Errorf("min/max can only be used for numeric fields, but found in '%s'", field)
+		}
+
+		// 5. Validar esquemas anidados en listas y mapas
+		if rule.Type == "list" && rule.List != nil {
+			if err := ValidateSchema(Schema{"items": *rule.List}); err != nil {
+				return fmt.Errorf("invalid list schema in '%s': %v", field, err)
+			}
+		}
+
+		if rule.Type == "map" && rule.Schema != nil {
+			if err := ValidateSchema(*rule.Schema); err != nil {
+				return fmt.Errorf("invalid map schema in '%s': %v", field, err)
+			}
+		}
+	}
+
+	return nil // Si todo está correcto
 }
