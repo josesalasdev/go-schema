@@ -1,14 +1,20 @@
 package validator
 
+type CustomValidator func(value interface{}) *string
+
 type Rule struct {
-	Type          string        `json:"type"`                     // Tipo de dato: string, int, bool, list...
-	Required      bool          `json:"required"`                 // ¿Es obligatorio?
-	MinLength     *int          `json:"minlength,omitempty"`      // Longitud mínima (para strings)
-	MaxLength     *int          `json:"maxlength,omitempty"`      // Longitud máxima
-	Min           *int          `json:"min,omitempty"`            // Mínimo (para números)
-	Max           *int          `json:"max,omitempty"`            // Máximo (para números)
-	Regex         *string       `json:"regex,omitempty"`          // Validación con regex
-	AllowedValues []interface{} `json:"allowed_values,omitempty"` // Lista de valores permitidos
+	Type          string          `json:"type"`
+	Required      bool            `json:"required"`
+	MinLength     *int            `json:"minlength,omitempty"`
+	MaxLength     *int            `json:"maxlength,omitempty"`
+	Min           *int            `json:"min,omitempty"`
+	Max           *int            `json:"max,omitempty"`
+	Regex         *string         `json:"regex,omitempty"`
+	AllowedValues []interface{}   `json:"allowed_values,omitempty"`
+	Items         *Rule           `json:"items,omitempty"`    // For lists
+	Schema        *Schema         `json:"schema,omitempty"`   // For maps
+	CheckWith     CustomValidator `json:"-"`                  // Custom validation function
+	Messages      *ErrorMessages  `json:"messages,omitempty"` // Custom error messages
 }
 
 type Schema map[string]Rule
