@@ -12,7 +12,14 @@ func matchesType(value interface{}, expectedType string) bool {
 	case "string":
 		return t.Kind() == reflect.String
 	case "int":
-		return t.Kind() == reflect.Int || t.Kind() == reflect.Int64
+		// Permitir int, int64 y detectar float64 con valores enteros
+		if t.Kind() == reflect.Int || t.Kind() == reflect.Int64 {
+			return true
+		}
+		if t.Kind() == reflect.Float64 {
+			return value == float64(int(value.(float64))) // Verifica si es un entero real
+		}
+		return false
 	case "float":
 		return t.Kind() == reflect.Float32 || t.Kind() == reflect.Float64
 	case "bool":
@@ -83,27 +90,27 @@ func ValidateSchema(schema Schema) error {
 	}
 
 	for field, rule := range schema {
-		// 1. Validar que el nombre del campo sea un string válido en JSON
+		// 1. Validar nombre del campo
 		if !isValidJSONKey(field) {
 			return fmt.Errorf("invalid field name: '%s'", field)
 		}
 
-		// 2. Validar que el tipo esté en la lista de tipos permitidos
+		// 2. Validar tipo
 		if _, ok := validTypes[rule.Type]; !ok {
 			return fmt.Errorf("invalid type '%s' for field '%s'", rule.Type, field)
 		}
 
-		// 3. Validar que los valores por defecto sean del tipo correcto
+		// 3. Validar valores por defecto
 		if rule.Default != nil && !matchesType(rule.Default, rule.Type) {
 			return fmt.Errorf("default value for '%s' does not match type '%s'", field, rule.Type)
 		}
 
-		// 4. Validar que Min y Max solo existan en tipos numéricos
+		// 4. Validar Min y Max solo en números
 		if (rule.Min != 0 || rule.Max != 0) && rule.Type != "int" && rule.Type != "float" {
 			return fmt.Errorf("min/max can only be used for numeric fields, but found in '%s'", field)
 		}
 
-		// 5. Validar esquemas anidados en listas y mapas
+		// 5. Validar listas y mapas anidados
 		if rule.Type == "list" && rule.List != nil {
 			if err := ValidateSchema(Schema{"items": *rule.List}); err != nil {
 				return fmt.Errorf("invalid list schema in '%s': %v", field, err)
@@ -117,5 +124,5 @@ func ValidateSchema(schema Schema) error {
 		}
 	}
 
-	return nil // Si todo está correcto
+	return nil
 }
