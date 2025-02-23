@@ -29,34 +29,34 @@ func matchesType(value interface{}, expectedType string) bool {
 func Validate(data map[string]interface{}, schema Schema) ValidationResult {
 	var validationErrors []ValidationError
 
-	for field, rule := range schema {
-		value, exists := data[field]
-
-		// Aplicar valor por defecto si no existe
-		if !exists && rule.Default != nil {
-			data[field] = rule.Default
-			value = rule.Default
-			exists = true
-		}
-
-		// Verificar si es obligatorio
-		if rule.Required && !exists {
-			msg := "Field is required"
-			if rule.Messages != nil && rule.Messages.Required != nil {
-				msg = *rule.Messages.Required
-			}
-			validationErrors = append(validationErrors, ValidationError{Field: field, Message: msg})
-			continue
+	// Iteramos sobre los datos, validando solo los campos presentes
+	for field, value := range data {
+		rule, exists := schema[field]
+		if !exists {
+			continue // Si el campo no está en el esquema, lo ignoramos
 		}
 
 		// Validar tipo
-		if exists && !matchesType(value, rule.Type) {
+		if !matchesType(value, rule.Type) {
 			msg := fmt.Sprintf("Invalid type: expected %s, got %T", rule.Type, value)
 			if rule.Messages != nil && rule.Messages.TypeMismatch != nil {
 				msg = *rule.Messages.TypeMismatch
 			}
 			validationErrors = append(validationErrors, ValidationError{Field: field, Message: msg})
 			continue
+		}
+	}
+
+	// Ahora verificamos los campos requeridos en el schema que no están en data
+	for field, rule := range schema {
+		if rule.Required {
+			if _, exists := data[field]; !exists {
+				msg := "Field is required"
+				if rule.Messages != nil && rule.Messages.Required != nil {
+					msg = *rule.Messages.Required
+				}
+				validationErrors = append(validationErrors, ValidationError{Field: field, Message: msg})
+			}
 		}
 	}
 
