@@ -4,6 +4,24 @@ import (
 	"testing"
 )
 
+func TestNumberValidation(t *testing.T) {
+	schema := Schema{
+		"user": {
+			Type: "int",
+			Max:  1,
+		},
+	}
+
+	validData := map[string]interface{}{
+		"user": 3,
+	}
+
+	result := Validate(validData, schema)
+	if !result.IsValid {
+		t.Errorf("Expected valid data, got errors: %v", result.Errors)
+	}
+}
+
 // Custom validation function (must be even)
 func validateEvenNumber(value interface{}) *string {
 	num, ok := value.(int)
