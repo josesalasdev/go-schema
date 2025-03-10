@@ -5,6 +5,10 @@ import (
 	"reflect"
 )
 
+/*
+This function is a fundamental part of schemas.
+Its purpose is to check if a provided value matches an expected type.
+*/
 func matchesType(value interface{}, expectedType string) bool {
 	t := reflect.TypeOf(value)
 
@@ -33,6 +37,115 @@ func matchesType(value interface{}, expectedType string) bool {
 	}
 }
 
+// Add numeric validation (Min/Max) - call this from Validate
+func validateNumeric(value interface{}, rule Rule) (bool, string) {
+	if rule.Type == "int" {
+		intVal, ok := extractIntValue(value)
+		if !ok {
+			return false, fmt.Sprintf("Failed to convert %v to integer", value)
+		}
+		if rule.Min != 0 && intVal < int64(rule.Min) {
+			return false, fmt.Sprintf("Value %d is less than minimum %d", intVal, int64(rule.Min))
+		}
+		if rule.Max != 0 && intVal > int64(rule.Max) {
+			return false, fmt.Sprintf("Value %d is greater than maximum %d", intVal, int64(rule.Max))
+		}
+	} else if rule.Type == "float" {
+		floatVal, ok := extractFloatValue(value)
+		if !ok {
+			return false, fmt.Sprintf("Failed to convert %v to float", value)
+		}
+		if rule.Min != 0 && floatVal < float64(rule.Min) {
+			return false, fmt.Sprintf("Value %f is less than minimum %f", floatVal, rule.Min)
+		}
+		if rule.Max != 0 && floatVal > float64(rule.Max) {
+			return false, fmt.Sprintf("Value %f is greater than maximum %f", floatVal, rule.Max)
+		}
+	}
+	return true, ""
+}
+
+// Add string validation (Length/Regex) - call this from Validate
+func validateString(value string, rule Rule) (bool, string) {
+	if rule.MinLength != 0 && len(value) < rule.MinLength {
+		return false, fmt.Sprintf("String length %d is less than minimum %d", len(value), rule.MinLength)
+	}
+	if rule.MaxLength != 0 && len(value) > rule.MaxLength {
+		return false, fmt.Sprintf("String length %d is greater than maximum %d", len(value), rule.MaxLength)
+	}
+	if rule.Regex != nil && !rule.Regex.MatchString(value) {
+		return false, "String does not match pattern"
+	}
+	return true, ""
+}
+
+func ValidateSchema(schema Schema) error {
+	validTypes := map[string]bool{
+		"string": true, "int": true, "float": true,
+		"bool": true, "list": true, "map": true,
+	}
+
+	for field, rule := range schema {
+		// 1. Validar nombre del campo
+		if !isValidJSONKey(field) {
+			return fmt.Errorf("invalid field name: '%s'", field)
+		}
+
+		// 2. Validar tipo
+		if _, ok := validTypes[rule.Type]; !ok {
+			return fmt.Errorf("invalid type '%s' for field '%s'", rule.Type, field)
+		}
+
+		// 3. Validar valores por defecto
+		if rule.Default != nil && !matchesType(rule.Default, rule.Type) {
+			return fmt.Errorf("default value for '%s' does not match type '%s'", field, rule.Type)
+		}
+
+		// 4. Validar Min y Max solo en números
+		if (rule.Min != 0 || rule.Max != 0) && rule.Type != "int" && rule.Type != "float" {
+			return fmt.Errorf("min/max can only be used for numeric fields, but found in '%s'", field)
+		}
+
+		// 5. Validar listas y mapas anidados
+		if rule.Type == "list" && rule.List != nil {
+			if err := ValidateSchema(Schema{"items": *rule.List}); err != nil {
+				return fmt.Errorf("invalid list schema in '%s': %v", field, err)
+			}
+		}
+
+		if rule.Type == "map" && rule.Schema != nil {
+			if err := ValidateSchema(*rule.Schema); err != nil {
+				return fmt.Errorf("invalid map schema in '%s': %v", field, err)
+			}
+		}
+	}
+
+	return nil
+}
+
+// Validate checks if the provided data conforms to the specified schema and returns a ValidationResult.
+//
+// This function performs multiple validation steps:
+// 1. Checks that all fields in the data match their defined types in the schema
+// 2. Performs type-specific validations:
+//   - For numeric types (int, float): validates range constraints
+//   - For string type: validates length and other string-specific rules
+//   - For list type: recursively validates each item in the list
+//   - For map type: recursively validates the nested structure
+//
+// 3. Verifies that all required fields are present
+//
+// The function supports custom error messages defined in the schema for different validation failures.
+//
+// Parameters:
+//   - data: A map containing the data to validate
+//   - schema: The schema defining validation rules for each field
+//
+// Returns:
+//
+//	A ValidationResult containing:
+//	- IsValid: A boolean indicating whether all validations passed
+//	- Errors: A slice of ValidationError objects describing each validation failure
 func Validate(data map[string]interface{}, schema Schema) ValidationResult {
 	var validationErrors []ValidationError
 
@@ -118,100 +231,4 @@ func Validate(data map[string]interface{}, schema Schema) ValidationResult {
 		IsValid: len(validationErrors) == 0,
 		Errors:  validationErrors,
 	}
-}
-
-// Add numeric validation (Min/Max) - call this from Validate
-func validateNumeric(value interface{}, rule Rule) (bool, string) {
-	if rule.Type == "int" {
-		intVal, ok := extractIntValue(value)
-		if !ok {
-			return false, fmt.Sprintf("Failed to convert %v to integer", value)
-		}
-		if rule.Min != 0 && intVal < int64(rule.Min) {
-			return false, fmt.Sprintf("Value %d is less than minimum %d", intVal, int64(rule.Min))
-		}
-		if rule.Max != 0 && intVal > int64(rule.Max) {
-			return false, fmt.Sprintf("Value %d is greater than maximum %d", intVal, int64(rule.Max))
-		}
-	} else if rule.Type == "float" {
-		floatVal, ok := extractFloatValue(value)
-		if !ok {
-			return false, fmt.Sprintf("Failed to convert %v to float", value)
-		}
-		if rule.Min != 0 && floatVal < float64(rule.Min) {
-			return false, fmt.Sprintf("Value %f is less than minimum %f", floatVal, rule.Min)
-		}
-		if rule.Max != 0 && floatVal > float64(rule.Max) {
-			return false, fmt.Sprintf("Value %f is greater than maximum %f", floatVal, rule.Max)
-		}
-	}
-	return true, ""
-}
-
-// Add string validation (Length/Regex) - call this from Validate
-func validateString(value string, rule Rule) (bool, string) {
-	if rule.MinLength != 0 && len(value) < rule.MinLength {
-		return false, fmt.Sprintf("String length %d is less than minimum %d", len(value), rule.MinLength)
-	}
-	if rule.MaxLength != 0 && len(value) > rule.MaxLength {
-		return false, fmt.Sprintf("String length %d is greater than maximum %d", len(value), rule.MaxLength)
-	}
-	if rule.Regex != nil && !rule.Regex.MatchString(value) {
-		return false, "String does not match pattern"
-	}
-	return true, ""
-}
-
-func isValidJSONKey(key string) bool {
-	// Un JSON key válido no debe contener caracteres de control ni espacios en blanco
-	for _, r := range key {
-		if r <= 0x1F || r == ' ' { // Caracteres de control y espacio
-			return false
-		}
-	}
-	return true
-}
-
-func ValidateSchema(schema Schema) error {
-	validTypes := map[string]bool{
-		"string": true, "int": true, "float": true,
-		"bool": true, "list": true, "map": true,
-	}
-
-	for field, rule := range schema {
-		// 1. Validar nombre del campo
-		if !isValidJSONKey(field) {
-			return fmt.Errorf("invalid field name: '%s'", field)
-		}
-
-		// 2. Validar tipo
-		if _, ok := validTypes[rule.Type]; !ok {
-			return fmt.Errorf("invalid type '%s' for field '%s'", rule.Type, field)
-		}
-
-		// 3. Validar valores por defecto
-		if rule.Default != nil && !matchesType(rule.Default, rule.Type) {
-			return fmt.Errorf("default value for '%s' does not match type '%s'", field, rule.Type)
-		}
-
-		// 4. Validar Min y Max solo en números
-		if (rule.Min != 0 || rule.Max != 0) && rule.Type != "int" && rule.Type != "float" {
-			return fmt.Errorf("min/max can only be used for numeric fields, but found in '%s'", field)
-		}
-
-		// 5. Validar listas y mapas anidados
-		if rule.Type == "list" && rule.List != nil {
-			if err := ValidateSchema(Schema{"items": *rule.List}); err != nil {
-				return fmt.Errorf("invalid list schema in '%s': %v", field, err)
-			}
-		}
-
-		if rule.Type == "map" && rule.Schema != nil {
-			if err := ValidateSchema(*rule.Schema); err != nil {
-				return fmt.Errorf("invalid map schema in '%s': %v", field, err)
-			}
-		}
-	}
-
-	return nil
 }

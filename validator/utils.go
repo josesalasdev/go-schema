@@ -67,3 +67,14 @@ func extractFloatValue(value interface{}) (float64, bool) {
 	}
 	return 0, false
 }
+
+// isValidJSONKey returns true if the key is a valid JSON key
+func isValidJSONKey(key string) bool {
+	// Un JSON key válido no debe contener caracteres de control ni espacios en blanco
+	for _, r := range key {
+		if r <= 0x1F || r == ' ' { // Caracteres de control y espacio
+			return false
+		}
+	}
+	return true
+}
