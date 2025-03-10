@@ -55,7 +55,7 @@
 			<div id="nav">
 				<select id="files">
 				
-				<option value="file0">github.com/josesalasdev/go-schema/validator/errors.go (0.0%)</option>
+				<option value="file0">github.com/josesalasdev/go-schema/validator/schema.go (100.0%)</option>
 				
 				<option value="file1">github.com/josesalasdev/go-schema/validator/utils.go (94.1%)</option>
 				
@@ -84,22 +84,55 @@
 		
 		<pre class="file" id="file0" style="display: none">package validator
 
-import "fmt"
+import (
+        "fmt"
+        "regexp"
+)
 
-func (e ValidationError) Error() string <span class="cov0" title="0">{
-        return fmt.Sprintf("%s: %s", e.Field, e.Message)
-}</span>
+// Schema defines validation rules for a set of fields
+type Schema map[string]Rule
 
-type ErrorMessages struct {
+// Rule defines validation rules for a single field
+type Rule struct {
+        Type         string         `json:"type"`
+        Required     bool           `json:"required,omitempty"`
+        Default      interface{}    `json:"default,omitempty"`
+        Min          float64        `json:"min,omitempty"`
+        Max          float64        `json:"max,omitempty"`
+        MinLength    int            `json:"min_length,omitempty"`
+        MaxLength    int            `json:"max_length,omitempty"`
+        Regex        *regexp.Regexp `json:"-"`
+        RegexPattern string         `json:"regex,omitempty"`
+        List         *Rule          `json:"list,omitempty"`
+        Schema       *Schema        `json:"schema,omitempty"`
+        Messages     *Messages      `json:"messages,omitempty"`
+}
+
+// Messages provides customized error messages
+type Messages struct {
         Required     *string `json:"required,omitempty"`
         TypeMismatch *string `json:"type_mismatch,omitempty"`
-        MinLength    *string `json:"min_length,omitempty"`
-        MaxLength    *string `json:"max_length,omitempty"`
-        Min          *string `json:"min,omitempty"`
-        Max          *string `json:"max,omitempty"`
-        Regex        *string `json:"regex,omitempty"`
-        CustomError  *string `json:"custom_error,omitempty"`
+        Range        *string `json:"range,omitempty"`
+        Length       *string `json:"length,omitempty"`
+        Pattern      *string `json:"pattern,omitempty"`
 }
+
+// ValidationResult represents the result of validation
+type ValidationResult struct {
+        IsValid bool
+        Errors  []ValidationError
+}
+
+// ValidationError represents a single validation error
+type ValidationError struct {
+        Field   string
+        Message string
+}
+
+// Error returns a string representation of the validation error
+func (e ValidationError) Error() string <span class="cov10" title="4">{
+        return fmt.Sprintf("%s: %s", e.Field, e.Message)
+}</span>
 </pre>
 		
 		<pre class="file" id="file1" style="display: none">package validator
