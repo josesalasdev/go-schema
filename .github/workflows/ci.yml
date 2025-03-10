@@ -6,6 +6,11 @@ on:
   pull_request:
     branches: [ main, feature/* ]
 
+# Añadir esta sección de permisos
+permissions:
+  contents: write
+  pages: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
