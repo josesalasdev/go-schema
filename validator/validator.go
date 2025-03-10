@@ -37,7 +37,7 @@ func matchesType(value interface{}, expectedType string) bool {
 	}
 }
 
-// Add numeric validation (Min/Max) - call this from Validate
+// validateNumeric checks if a numeric value conforms to the specified rules.
 func validateNumeric(value interface{}, rule Rule) (bool, string) {
 	if rule.Type == "int" {
 		intVal, ok := extractIntValue(value)
@@ -65,7 +65,7 @@ func validateNumeric(value interface{}, rule Rule) (bool, string) {
 	return true, ""
 }
 
-// Add string validation (Length/Regex) - call this from Validate
+// validateString checks if a string value conforms to the specified rules.
 func validateString(value string, rule Rule) (bool, string) {
 	if rule.MinLength != 0 && len(value) < rule.MinLength {
 		return false, fmt.Sprintf("String length %d is less than minimum %d", len(value), rule.MinLength)
@@ -79,6 +79,7 @@ func validateString(value string, rule Rule) (bool, string) {
 	return true, ""
 }
 
+// ValidateSchema checks if the provided schema is valid.
 func ValidateSchema(schema Schema) error {
 	validTypes := map[string]bool{
 		"string": true, "int": true, "float": true,

@@ -3,7 +3,7 @@ package validator
 import "fmt"
 
 func (e ValidationError) Error() string {
-	return fmt.Sprintf("Error in '%s': %s", e.Field, e.Message)
+	return fmt.Sprintf("%s: %s", e.Field, e.Message)
 }
 
 type ErrorMessages struct {
