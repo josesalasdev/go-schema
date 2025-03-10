@@ -4,7 +4,7 @@ on:
   push:
     branches: [ main ]
   pull_request:
-    branches: [ main, feature/*  ]
+    branches: [ main, feature/* ]
 
 jobs:
   build:
@@ -55,14 +55,38 @@ jobs:
 
     # Generate and upload coverage report as artifact
     - name: Generate HTML coverage report
-      run: go tool cover -html=coverage.txt -o coverage.html
+      run: |
+        mkdir -p coverage
+        go tool cover -html=coverage.txt -o coverage/index.html
+        echo '<meta http-equiv="refresh" content="0; url=./index.html" />' > coverage/index.md
       
     - name: Upload coverage report
       uses: actions/upload-artifact@v4
       with:
         name: coverage-report
-        path: coverage.html
+        path: coverage/
         retention-days: 7
 
     - name: Build
       run: go build -v ./...
+
+  # New job to publish coverage report to GitHub Pages
+  publish-coverage:
+    needs: build
+    if: github.ref == 'refs/heads/main'  # Only run on main branch
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Download coverage artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: coverage-report
+        path: coverage
+    
+    - name: Deploy to GitHub Pages
+      uses: peaceiris/actions-gh-pages@v3
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        publish_dir: ./coverage
+        destination_dir: coverage
+        keep_files: false

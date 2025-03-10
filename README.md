@@ -2,6 +2,8 @@
 
 Go-Schema is a lightweight data validation library for Go, inspired by [Cerberus from Python](https://github.com/pyeve/cerberus). It allows for easy schema definition and provides clear and detailed validation errors.
 
+[![Coverage Report](https://img.shields.io/badge/coverage-report-blue)](https://josesalasdev.github.io/go-schema/coverage/)
+
 ## Features
 
 - **Simple yet Powerful Validation**: Define clear and concise schemas for structured data validation.
