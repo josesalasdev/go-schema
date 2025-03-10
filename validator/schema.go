@@ -1,6 +1,7 @@
 package validator
 
 import (
+	"fmt"
 	"regexp"
 )
 
@@ -42,4 +43,9 @@ type ValidationResult struct {
 type ValidationError struct {
 	Field   string
 	Message string
+}
+
+// Error returns a string representation of the validation error
+func (e ValidationError) Error() string {
+	return fmt.Sprintf("%s: %s", e.Field, e.Message)
 }
