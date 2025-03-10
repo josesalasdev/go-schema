@@ -36,14 +36,14 @@ func matchesType(value interface{}, expectedType string) bool {
 func Validate(data map[string]interface{}, schema Schema) ValidationResult {
 	var validationErrors []ValidationError
 
-	// Iteramos sobre los datos, validando solo los campos presentes
+	// Validate provided data against schema
 	for field, value := range data {
 		rule, exists := schema[field]
 		if !exists {
-			continue // Si el campo no está en el esquema, lo ignoramos
+			continue // Skip fields not in schema
 		}
 
-		// Validar tipo
+		// Type validation
 		if !matchesType(value, rule.Type) {
 			msg := fmt.Sprintf("Invalid type: expected %s, got %T", rule.Type, value)
 			if rule.Messages != nil && rule.Messages.TypeMismatch != nil {
@@ -52,9 +52,56 @@ func Validate(data map[string]interface{}, schema Schema) ValidationResult {
 			validationErrors = append(validationErrors, ValidationError{Field: field, Message: msg})
 			continue
 		}
+
+		// Type-specific validations
+		switch rule.Type {
+		case "int", "float":
+			if valid, errMsg := validateNumeric(value, rule); !valid {
+				if rule.Messages != nil && rule.Messages.Range != nil {
+					errMsg = *rule.Messages.Range
+				}
+				validationErrors = append(validationErrors, ValidationError{Field: field, Message: errMsg})
+			}
+		case "string":
+			if strVal, ok := value.(string); ok {
+				if valid, errMsg := validateString(strVal, rule); !valid {
+					if rule.Messages != nil && rule.Messages.Length != nil {
+						errMsg = *rule.Messages.Length
+					}
+					validationErrors = append(validationErrors, ValidationError{Field: field, Message: errMsg})
+				}
+			}
+		case "list":
+			if listVal, ok := value.([]interface{}); ok && rule.List != nil {
+				for i, item := range listVal {
+					itemData := map[string]interface{}{"items": item}
+					result := Validate(itemData, Schema{"items": *rule.List})
+					if !result.IsValid {
+						for _, err := range result.Errors {
+							validationErrors = append(validationErrors, ValidationError{
+								Field:   fmt.Sprintf("%s[%d]", field, i),
+								Message: err.Message,
+							})
+						}
+					}
+				}
+			}
+		case "map":
+			if mapVal, ok := value.(map[string]interface{}); ok && rule.Schema != nil {
+				result := Validate(mapVal, *rule.Schema)
+				if !result.IsValid {
+					for _, err := range result.Errors {
+						validationErrors = append(validationErrors, ValidationError{
+							Field:   fmt.Sprintf("%s.%s", field, err.Field),
+							Message: err.Message,
+						})
+					}
+				}
+			}
+		}
 	}
 
-	// Ahora verificamos los campos requeridos en el schema que no están en data
+	// Check for required fields
 	for field, rule := range schema {
 		if rule.Required {
 			if _, exists := data[field]; !exists {
@@ -71,6 +118,48 @@ func Validate(data map[string]interface{}, schema Schema) ValidationResult {
 		IsValid: len(validationErrors) == 0,
 		Errors:  validationErrors,
 	}
+}
+
+// Add numeric validation (Min/Max) - call this from Validate
+func validateNumeric(value interface{}, rule Rule) (bool, string) {
+	if rule.Type == "int" {
+		intVal, ok := extractIntValue(value)
+		if !ok {
+			return false, fmt.Sprintf("Failed to convert %v to integer", value)
+		}
+		if rule.Min != 0 && intVal < int64(rule.Min) {
+			return false, fmt.Sprintf("Value %d is less than minimum %d", intVal, int64(rule.Min))
+		}
+		if rule.Max != 0 && intVal > int64(rule.Max) {
+			return false, fmt.Sprintf("Value %d is greater than maximum %d", intVal, int64(rule.Max))
+		}
+	} else if rule.Type == "float" {
+		floatVal, ok := extractFloatValue(value)
+		if !ok {
+			return false, fmt.Sprintf("Failed to convert %v to float", value)
+		}
+		if rule.Min != 0 && floatVal < float64(rule.Min) {
+			return false, fmt.Sprintf("Value %f is less than minimum %f", floatVal, rule.Min)
+		}
+		if rule.Max != 0 && floatVal > float64(rule.Max) {
+			return false, fmt.Sprintf("Value %f is greater than maximum %f", floatVal, rule.Max)
+		}
+	}
+	return true, ""
+}
+
+// Add string validation (Length/Regex) - call this from Validate
+func validateString(value string, rule Rule) (bool, string) {
+	if rule.MinLength != 0 && len(value) < rule.MinLength {
+		return false, fmt.Sprintf("String length %d is less than minimum %d", len(value), rule.MinLength)
+	}
+	if rule.MaxLength != 0 && len(value) > rule.MaxLength {
+		return false, fmt.Sprintf("String length %d is greater than maximum %d", len(value), rule.MaxLength)
+	}
+	if rule.Regex != nil && !rule.Regex.MatchString(value) {
+		return false, "String does not match pattern"
+	}
+	return true, ""
 }
 
 func isValidJSONKey(key string) bool {
