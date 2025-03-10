@@ -2,18 +2,8 @@ package validator
 
 import "fmt"
 
-type ValidationError struct {
-	Field   string
-	Message string
-}
-
 func (e ValidationError) Error() string {
-	return fmt.Sprintf("Error in '%s': %s", e.Field, e.Message)
-}
-
-type ValidationResult struct {
-	IsValid bool
-	Errors  []ValidationError
+	return fmt.Sprintf("%s: %s", e.Field, e.Message)
 }
 
 type ErrorMessages struct {
